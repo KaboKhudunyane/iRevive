@@ -1,7 +1,7 @@
 // Placeholder API functions for cart
 // In a real app, these would make HTTP requests to backend
 
-const CART_STORAGE_KEY = 'irevive_cart'
+const CART_STORAGE_KEY = 'cart'
 
 export const getCart = async () => {
   const cart = localStorage.getItem(CART_STORAGE_KEY)
