@@ -1,6 +1,5 @@
 import React, { createContext, useReducer, useEffect } from 'react'
 import { cartReducer, initialCartState, cartActions } from './cartReducer'
-import { getProductStock } from '../services/inventory'
 
 const CartContext = createContext()
 
@@ -12,13 +11,15 @@ const CartContext = createContext()
  * - Persists cart to localStorage
  * - Supports quantity updates and item removal
  * - Calculates totals automatically
- * - Validates stock before adding items
+ * - Validates stock at VARIANT level (not product level)
+ * - Each variant has independent stock tracking
  *
  * Features:
- * - Prevents adding more items than available stock
+ * - Prevents adding more items than available variant stock
  * - Persists cart across sessions
  * - Automatic calculation of totals
- * - Maximum quantity validation
+ * - Maximum quantity validation against variant stock
+ * - Works with variant-level inventory system
  *
  * Next steps:
  * - Add cart item forecasting for reserved inventory
@@ -46,14 +47,15 @@ const CartProvider = ({ children }) => {
   }, [cart])
 
   /**
-   * Add item to cart with stock validation
-   * Prevents adding more than available stock
+   * Add item to cart with variant-level stock validation
+   * Each variant has independent stock tracking
+   * Prevents adding more than available variant stock
    */
   const addItem = (product, variant, quantity = 1) => {
-    // Validate stock
-    const availableStock = getProductStock(product.id)
+    // Validate against variant stock (not product stock)
+    const availableStock = variant.stock || 0
     
-    // Check if we already have this item in cart
+    // Check if we already have this exact variant in cart
     const existingItem = cart.items.find(
       item => item.product.id === product.id && item.variant.id === variant.id
     )
@@ -61,8 +63,9 @@ const CartProvider = ({ children }) => {
     const totalQuantityInCart = existingItem ? existingItem.quantity + quantity : quantity
     
     if (totalQuantityInCart > availableStock) {
+      const remaining = availableStock - (existingItem?.quantity || 0)
       console.warn(
-        `Cannot add ${quantity} items. Only ${availableStock - (existingItem?.quantity || 0)} available.`
+        `Cannot add ${quantity} items. Only ${remaining} available for this variant.`
       )
       return false
     }
@@ -82,7 +85,7 @@ const CartProvider = ({ children }) => {
   }
 
   /**
-   * Update quantity with stock validation
+   * Update quantity with variant-level stock validation
    */
   const updateQuantity = (productId, variantId, quantity) => {
     if (quantity <= 0) {
@@ -90,10 +93,20 @@ const CartProvider = ({ children }) => {
       return
     }
 
-    // Validate against stock
-    const availableStock = getProductStock(productId)
+    // Get the item to access its variant stock
+    const item = cart.items.find(
+      item => item.product.id === productId && item.variant.id === variantId
+    )
+    
+    if (!item) {
+      console.error('Item not found in cart')
+      return
+    }
+
+    // Validate against variant stock (not product stock)
+    const availableStock = item.variant.stock || 0
     if (quantity > availableStock) {
-      console.warn(`Cannot set quantity to ${quantity}. Only ${availableStock} available.`)
+      console.warn(`Cannot set quantity to ${quantity}. Only ${availableStock} available for this variant.`)
       return
     }
 

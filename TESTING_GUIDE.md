@@ -1,44 +1,195 @@
-# iRevive Project - Issues Found & Testing Guide
+# iRevive Testing Guide - Variant-Level Inventory System
 
-## Critical Issues Summary
+## System Overview
 
-### Issue #1: All Products Show "Out of Stock" 🔴 CRITICAL
-**Status:** ✅ FIXED
-
-**What Was Wrong:**
-- ProductCard component didn't check the `inventory` field from products data
-- No "Add to Cart" button existed anywhere
-- Users had no way to purchase anything
-
-**How It Was Fixed:**
-```jsx
-// Before (broken):
-<Link to={`/product/${product.slug}`}>
-  View Details
-</Link>
-
-// After (working):
-{isInStock() ? (
-  <span className="bg-green-500">In Stock</span>
-) : (
-  <span className="bg-red-500">Out of Stock</span>
-)}
-<button disabled={!isInStock()}>Add to Cart</button>
-```
-
-**How to Test:**
-1. Go to `/products` page
-2. Look at product cards
-3. Each product should show either:
-   - 🟢 "In Stock (X available)" - if inventory > 0
-   - 🔴 "Out of Stock" - if inventory = 0
-4. "Add to Cart" button should be:
-   - Blue & clickable - if in stock
-   - Gray & disabled - if out of stock
+This is a **variant-level inventory system** where:
+- Each product (e.g., iPhone 13) can have multiple variants
+- Each variant is a unique combination of: **Color + Storage + Condition**
+- Each variant has **independent stock tracking**
+- Example: iPhone 13 Midnight 128GB Excellent = 4 units in stock (separate from iPhone 13 Midnight 256GB Excellent)
 
 ---
 
-### Issue #2: Admin Route Completely Unprotected 🔴 CRITICAL
+## Test 1: Product Browsing & Stock Display
+
+**Purpose:** Verify products show correct stock status
+
+**Steps:**
+1. Go to `/products` page
+2. Look at product cards
+3. Each product should show:
+   - ✅ Product image, name, and base price
+   - ✅ Stock badge showing:
+     - 🟢 "In Stock" (if ANY variant has stock) with number of available variants
+     - 🔴 "Out of Stock" (if ALL variants have 0 stock)
+   - ✅ "Add to Cart" button:
+     - Blue & clickable - if in stock
+     - Gray & disabled - if out of stock
+
+**Expected Result:**
+- Products with at least one variant having stock > 0 show "In Stock"
+- Products with all variants at 0 stock show "Out of Stock"
+
+**Test Data:**
+- iPhone 13: Should show "In Stock" (3+ variants available)
+- Other iPhones: Should show "In Stock" (at least one variant available)
+
+---
+
+## Test 2: Product Detail Page & Variant Selection
+
+**Purpose:** Verify variant filtering shows only available options
+
+**Steps:**
+1. Go to `/products`
+2. Click on any product (e.g., iPhone 13) with multiple variants
+3. Should be on `/product/iphone-13`
+4. Page should show:
+   - ✅ Product images
+   - ✅ Color selector (dropdown or buttons)
+   - ✅ Storage selector (dropdown or buttons)
+   - ✅ Condition selector (dropdown or buttons)
+   - ✅ Current price with any adjustments
+   - ✅ Stock availability for selected variant
+
+**Variant Filtering Tests:**
+
+**Test 2a: Color filtering**
+1. Look at Color dropdown
+2. Should only show colors that have at least ONE variant with stock > 0
+3. If "Midnight" has 0 stock in all storages/conditions, it should not appear
+4. If "Starlight" has any variant with stock, it should appear
+
+**Test 2b: Storage filtering (depends on color)**
+1. Select "Midnight" color
+2. Storage dropdown appears
+3. Should only show storage sizes available for Midnight with stock > 0
+4. Select different color, storage options should update
+5. Colors with no in-stock variants should be disabled/hidden
+
+**Test 2c: Condition filtering (depends on color + storage)**
+1. Select "Midnight" color and "256GB" storage
+2. Condition dropdown appears
+3. Should only show conditions available for this color+storage combo with stock
+4. Example: If only "Excellent" condition has stock, only that should appear
+
+**Test 2d: Price updates with variant selection**
+1. Select Midnight 128GB Excellent (base price)
+2. Price should be: R8,000 (base price + R0 adjustment)
+3. Select Midnight 256GB Excellent (+R200 storage adjustment)
+4. Price should update to: R8,200
+5. Select different condition (if different price adjustment)
+6. Price should adjust accordingly
+
+**Test 2e: Unavailable variants are disabled**
+1. Try selecting:
+   - A color with no stock → Should be disabled/grayed out
+   - A storage that's out of stock → Should be disabled
+   - A condition with 0 stock → Should be disabled
+2. UI should clearly show these are unavailable (opacity 50%, disabled state, etc.)
+
+**Expected Results:**
+- Only in-stock variants are selectable
+- Price updates based on selected variant
+- Out-of-stock options are clearly disabled
+- Stock count shown for selected variant
+
+---
+
+## Test 3: Cart & Stock Validation
+
+**Purpose:** Verify variant-level stock limits in cart
+
+**Steps:**
+
+**Test 3a: Add variant to cart**
+1. On product page, select: Midnight 128GB Excellent (4 in stock)
+2. Quantity: 2
+3. Click "Add to Cart"
+4. Should succeed and show "✓ Added to Cart"
+
+**Test 3b: Cannot exceed variant stock**
+1. Product has variant with 2 units in stock
+2. Try to add 3 units
+3. Should show error: "Cannot add 3 items. Only 2 available."
+4. Item not added to cart
+
+**Test 3c: Multiple variants of same product**
+1. Add to cart: Midnight 128GB = 2 units
+2. Go back to product
+3. Select different variant: Midnight 256GB = 1 unit
+4. Add to cart
+5. Cart should now have BOTH variants (separate items)
+6. Each variant's stock is independent
+
+**Test 3d: Modifying cart quantity respects stock**
+1. Cart has: iPhone 13 Midnight 128GB x2 (4 available)
+2. Try to change quantity to 5
+3. Should prevent change and warn: "Only 4 available"
+4. Stays at 2
+
+**Test 3e: Cart persists after page refresh**
+1. Add items to cart
+2. Refresh page (Ctrl+R)
+3. Cart items should still be there
+4. All variant details preserved
+
+**Expected Results:**
+- Cart validates against variant stock, not product stock
+- Cannot add more units than available for specific variant
+- Multiple variants tracked independently
+- Cart data persists
+
+---
+
+## Test 4: Checkout & Order Creation
+
+**Purpose:** Verify checkout correctly creates orders with variant details
+
+**Steps:**
+
+**Test 4a: Order review shows variant details**
+1. Cart has: iPhone 13 Midnight 128GB Excellent x2
+2. Go to checkout
+3. Order review should show:
+   - ✅ Product name
+   - ✅ Variant details: Color, Storage, Condition
+   - ✅ Variant-specific price
+   - ✅ Quantity and subtotal
+   - ✅ Order total
+
+**Test 4b: Order total calculation includes price adjustments**
+1. Add to cart:
+   - iPhone 13 Midnight 256GB (base R8,000 + R200 = R8,200) x1
+   - iPhone 13 Starlight 128GB (base R8,000 + R0 = R8,000) x1
+2. Order total should be: R16,200
+3. Should show breakdown of base + adjustment
+
+**Test 4c: Stock validation in checkout**
+1. Cart has: variant with 3 available, qty 3
+2. (Manually reduce stock in admin to 1 unit)
+3. Go to checkout, try to place order
+4. Should show error: "Not enough stock for variant"
+5. Order should not be created
+
+**Test 4d: Order successfully reduces variant stock**
+1. Before order: iPhone 13 Midnight 256GB = 5 units
+2. Order 2 units of this variant
+3. Go to admin → Products → iPhone 13
+4. Edit variant: Midnight 256GB should now show 3 units
+5. Stock was correctly reduced from 5 to 3
+
+**Test 4e: Cart clears after successful order**
+1. Add items to cart
+2. Place order successfully
+3. Cart should be empty
+4. Page should redirect to confirmation
+
+**Expected Results:**
+- Orders created with correct variant details
+- Pricing includes adjustments
+- Stock reduced per variant
+- Cart cleared after order
 **Status:** ✅ FIXED
 
 **What Was Wrong:**
@@ -148,212 +299,375 @@ User fills cart
    - Should show order status: "pending"
 ```
 
-**Test 3: Inventory reduced after order**
-```
-1. Before order: iPhone 13 shows "5 available"
-2. Place order for iPhone 13
-3. Go to /products
-4. iPhone 13 should now show "4 available"
-5. Login to admin (/admin/login)
-6. Go to Inventory tab
-7. iPhone 13 should show currentStock: 4 and sold: 1
-```
+---
+
+## Test 5: Admin Authentication & Access Control
+
+**Purpose:** Verify admin panel is protected
+
+**Steps:**
+
+**Test 5a: Cannot access /admin without login**
+1. Go directly to: http://localhost:5173/admin
+2. Should redirect to: http://localhost:5173/admin/login
+3. Should show login form with fields for username and password
+
+**Test 5b: Login with wrong credentials**
+1. Go to http://localhost:5173/admin/login
+2. Enter: username = "wrong", password = "wrong"
+3. Click "Login"
+4. Should show error message
+5. Stay on login page
+
+**Test 5c: Login with correct credentials**
+1. Go to http://localhost:5173/admin/login
+2. Enter: username = "admin", password = "admin123"
+3. Click "Login"
+4. Should redirect to /admin dashboard
+5. Should show "Welcome, admin!" or similar
+
+**Test 5d: Session persists on refresh**
+1. Login as admin
+2. Refresh page (Ctrl+R or Cmd+R)
+3. Should still be on /admin
+4. Should still be logged in (not redirected to login)
+
+**Test 5e: Logout works**
+1. On admin dashboard
+2. Click "Logout" button (top right)
+3. Should redirect to /admin/login
+4. Trying to visit /admin should redirect to login again
+
+**Expected Results:**
+- Admin pages are protected
+- Login required to access
+- Session persists with refresh
+- Logout clears session
 
 ---
 
-### Issue #4: Cart Doesn't Validate Stock 🔴 HIGH
-**Status:** ✅ FIXED
+## Test 6: Admin Product Management
 
-**What Was Wrong:**
-- Users could add unlimited items to cart
-- No validation against available inventory
-- Could exceed stock on checkout
+**Purpose:** Verify admin can create and manage products
 
-**How It Was Fixed:**
-```javascript
-// CartContext.jsx now validates:
-const addItem = (product, variant, quantity = 1) => {
-  const availableStock = getProductStock(product.id)
-  const totalQuantityInCart = existingItem ? 
-    existingItem.quantity + quantity : quantity
-  
-  if (totalQuantityInCart > availableStock) {
-    console.warn(`Cannot add. Only ${availableStock} available`)
-    return false  // Prevent adding
-  }
-  // ... add item
-}
-```
+**Steps:**
 
-**How to Test:**
-```
-1. Go to product with low stock (e.g., 2 available)
-2. Try to add 3 items to cart
-3. Should only allow adding up to 2
-4. Add 2 items, go to checkout
-5. Try to modify quantity in checkout to 3
-6. Should not allow (stays at 2)
-```
+**Test 6a: View all products**
+1. Login as admin
+2. Click "Products" tab
+3. Left panel should show list of all products
+4. Click on any product to select it
+5. Right panel should show product details
 
----
+**Test 6b: Create new product**
+1. On Products tab
+2. Click "+ New Product" button
+3. Form should appear with fields:
+   - Title (e.g., "iPhone 16")
+   - Slug (e.g., "iphone-16")
+   - Description
+   - Brand (default: Apple)
+   - Category (default: Smartphones)
+   - Base Price (e.g., 1200000 for R12,000)
+   - Images (comma-separated paths)
+4. Fill in all fields
+5. Click "Create Product"
+6. Product should appear in list on left
 
-### Issue #5: No Inventory Management in Admin 🔴 HIGH
-**Status:** ✅ FIXED
+**Test 6c: Edit product details**
+1. Click on product in list
+2. Form fills with product data
+3. Change title or description
+4. Click "Save Changes"
+5. Product should update in list
 
-**What Was Wrong:**
-- Admin page existed but had no real functionality
-- Couldn't update stock levels
-- Couldn't manage orders
+**Test 6d: Delete product**
+1. Select any product
+2. Click "Delete Product" button
+3. Confirm deletion
+4. Product should disappear from list
 
-**How It Was Fixed:**
-1. Rewrote admin.jsx completely (400+ lines)
-2. Three main tabs: Dashboard, Inventory, Orders
-
-**How to Test:**
-
-**Test 1: Admin Dashboard shows KPIs**
-```
-1. Login as admin (admin/admin123)
-2. Be on Dashboard tab
-3. Should see 4 cards:
-   - Total Products: 9
-   - Total Stock: (sum of all inventory)
-   - Total Sold: (increments with orders)
-   - Low Stock Items: (count of products with ≤3 stock)
-```
-
-**Test 2: Edit stock quantity**
-```
-1. On Inventory tab
-2. Find any product row
-3. Click "Edit" button
-4. Enter new stock value
-5. Click "Save"
-6. Stock should update
-7. Low stock warning should appear if stock ≤2
-```
-
-**Test 3: Manage order status**
-```
-1. On Orders tab
-2. Find any order
-3. Click status dropdown
-4. Select "Processing"
-5. Select "Shipped"
-6. Select "Delivered"
-7. Status should update in real-time
-```
+**Expected Results:**
+- Can create new products
+- Can edit product details
+- Can delete products
+- Products appear/disappear from list immediately
 
 ---
 
-## How to Test All Features
+## Test 7: Admin Variant Management
 
-### 1️⃣ Product/Inventory Flow
+**Purpose:** Verify admin can manage variants with individual stock
 
-**Test: Product with stock**
-```
-URL: http://localhost:5173/products
-1. See product card with "In Stock (X available)"
-2. Button says "Add to Cart" and is blue/clickable
-3. Click button → confirms "✓ Added"
-```
+**Steps:**
 
-**Test: Product without stock**
-```
-1. On Products page
-2. Find product with 0 stock
-3. Button says "Out of Stock" and is gray/disabled
-4. Cannot click button
-```
+**Test 7a: View variants for product**
+1. Login as admin, go to Products tab
+2. Click on any product (e.g., iPhone 13)
+3. Right panel should show "Variants" table with columns:
+   - Color
+   - Storage (GB)
+   - Condition
+   - Stock (with color coding: green for in-stock, red for out)
+   - Price Adjust
+   - Actions (Edit, Delete buttons)
 
-**Test: Product detail page**
-```
-URL: http://localhost:5173/product/iphone-13
-1. Shows stock count at top
-2. Shows color selector
-3. Shows storage selector
-4. Shows condition selector
-5. Shows quantity selector (+-)
-6. "Add to Cart" button matches stock availability
-7. Can select quantity up to available stock
-```
+**Test 7b: Create new variant**
+1. On Products tab, select a product
+2. Click "+ Add Variant" button
+3. Form appears with:
+   - Color dropdown or text input
+   - Storage (number, GB)
+   - Condition dropdown (Excellent/Good/Fair/Like New)
+   - Stock (number)
+   - Price Adjustment (±cents from base price)
+   - Image path (optional)
+4. Fill in: Midnight, 512GB, Excellent, Stock: 2, Adjust: +500
+5. Click "Create Variant"
+6. Variant should appear in table with:
+   - Color: Midnight
+   - Storage: 512
+   - Condition: Excellent
+   - Stock: 2 (green background)
+   - Price Adjust: +500
 
-### 2️⃣ Cart Flow
+**Test 7c: Edit variant details**
+1. In Variants table, click "Edit" button
+2. Form fills with variant data
+3. Change stock to 5
+4. Change price adjust to +600
+5. Click "Update Variant"
+6. Table should update: Stock now 5, Adjust now +600
 
-**Test: Add to cart from product page**
-```
-1. On any product detail page
-2. Select color, storage, condition
-3. Select quantity
-4. Click "Add to Cart"
-5. Go to /cart
-6. Item should be there with correct details
-```
+**Test 7d: Delete variant**
+1. In Variants table, click "Delete" button
+2. Variant should be removed from table
+3. Product can still exist with fewer variants
 
-**Test: Add to cart from product card**
-```
-1. On /products page
-2. Click "Add to Cart" on any in-stock product
-3. Show "✓ Added" for 2 seconds
-4. Go to /cart
-5. First variant of that product should be in cart
-```
+**Test 7e: Stock highlighting**
+1. Create or edit a variant
+2. Set stock to 0 → Should show red background
+3. Set stock to 1-2 → Should show orange with "LOW" badge
+4. Set stock to 3+ → Should show green background
 
-**Test: Modify cart**
-```
-1. Go to /cart
-2. Change quantity using number input
-3. Subtotal should update
-4. Total should update
-5. Remove item button should work (removes row)
-6. Clear cart button should empty cart
-```
+**Test 7f: Price adjustment affects order**
+1. Create variant: color "Red", base price R8,000, adjust +200
+2. Customer adds variant to cart
+3. Variant price should show as R8,200 (R8,000 + R200)
 
-**Test: Search quantity limits**
-```
-1. Product has 3 stock
-2. Add item to cart with qty 2
-3. Go to /cart
-4. Try to change quantity to 4
-5. Should not allow (stays at 3)
-6. Increase available qty only works up to stock
-```
+**Test 7g: Stock adjustment affects availability**
+1. Create variant with stock 0
+2. Go to /product/[product] as customer
+3. This variant should be hidden (no option to select)
+4. Go back to admin, increase stock to 3
+5. Go to /product/[product] again
+6. This variant should now be visible and selectable
 
-### 3️⃣ Checkout Flow
+**Expected Results:**
+- Can create variants with all details
+- Stock level controls availability on customer site
+- Price adjustments affect order totals
+- Variants are deleted independently
+- Low stock is highlighted
 
-**Test: Checkout with items**
-```
-1. Add items to cart
-2. Click "Proceed to Checkout"
-3. Should show order review with:
-   - List of items
-   - Subtotal, Shipping (FREE), Total
-   - Payment notice (Payment coming soon)
-4. Buttons: "Back to Cart" and "Place Order"
-```
+---
 
-**Test: Complete checkout**
-```
-1. On checkout page
-2. Click "Place Order"
-3. Should show "Order Confirmed!" page
-4. Should display order ID, total, status
-5. After 2 seconds, redirected to confirmation page
-```
+## Test 8: Order Management (Admin)
 
-**Test: Order confirmation page**
-```
-URL: /order-confirmation/[orderId]
-1. Shows ✓ checkmark
-2. Shows order ID
-3. Lists all items purchased
-4. Shows total
-5. Shows order status (should be "pending")
-6. Shows "What's Next?" section
-7. Links to continue shopping
-```
+**Purpose:** Verify admin can view and manage orders
 
-**Test: Stock reduced after checkout**
+**Steps:**
+
+**Test 8a: View all orders**
+1. Login as admin
+2. Click "Orders" tab
+3. Should show table with columns:
+   - Order ID
+   - Customer (or "-")
+   - Items Count
+   - Total
+   - Status
+   - Actions
+4. Orders should be listed with newest first
+
+**Test 8b: Update order status**
+1. Find an order in the table
+2. Click status dropdown (currently "pending")
+3. Select "processing"
+4. Status should update to "processing"
+5. Can cycle through: pending → processing → shipped → delivered
+
+**Test 8c: View order details**
+1. Click on order ID or view button
+2. Should show full order details:
+   - Order ID
+   - Date created
+   - List of items with variant details:
+     - Product name
+     - Color, Storage, Condition
+     - Unit price
+     - Quantity
+     - Subtotal
+   - Order total
+   - Order status
+   - Payment status (if payment was made)
+
+**Expected Results:**
+- Orders visible in admin
+- Can change order status
+- All variant details preserved in order
+- Pricing shows correct adjustments
+
+---
+
+## Test 9: End-to-End Integration
+
+**Purpose:** Verify complete flow from admin creation to customer purchase
+
+**Steps:**
+
+**Test 9a: Create product and variant, then sell it**
+1. **Admin:** Create new product "TestPhone"
+2. **Admin:** Create variant: Blue, 256GB, Excellent, Stock: 5, Price +100
+3. **Customer:** Go to /products
+4. **Customer:** Find "TestPhone", should show "In Stock"
+5. **Customer:** Click product
+6. **Customer:** Select Blue color → 256GB storage → Excellent condition
+7. **Customer:** Price should show base + 100
+8. **Customer:** Add 2 units to cart
+9. **Customer:** Go to checkout
+10. **Customer:** Place order for 2 units
+11. **Admin:** Check Products tab → TestPhone variant
+12. **Admin:** Stock should now show 3 (was 5, reduced by 2)
+13. **Admin:** Check Orders tab
+14. **Admin:** Should see new order with 2 units of TestPhone variant
+
+**Expected Results:**
+- Complete flow works
+- Stock correctly reduces
+- Order contains variant details
+- Price calculations are correct
+
+---
+
+## Validation Checklist
+
+Use this checklist to verify all functionality:
+
+### Product Browsing ✅
+- [ ] Products show correct stock status
+- [ ] In-stock products have blue "Add to Cart"
+- [ ] Out-of-stock products have gray disabled button
+- [ ] Variant count shown on cards
+
+### Product Details ✅
+- [ ] Color selector shows only in-stock colors
+- [ ] Storage selector updates when color changes
+- [ ] Condition selector updates when storage changes
+- [ ] Price updates with variant selection
+- [ ] Stock count shown for selected variant
+- [ ] Out-of-stock options are disabled
+
+### Cart ✅
+- [ ] Can add variant to cart
+- [ ] Cannot add more than available stock
+- [ ] Cart persists after page refresh
+- [ ] Can modify quantity (respects stock limits)
+- [ ] Can remove items
+- [ ] Can clear cart
+- [ ] Total updates correctly
+
+### Checkout ✅
+- [ ] Shows order review with variant details
+- [ ] Price calculation includes adjustments
+- [ ] Stock validation before order creation
+- [ ] Order created successfully
+- [ ] Stock reduced after order
+- [ ] Cart cleared after order
+- [ ] Confirmation page shows details
+
+### Admin ✅
+- [ ] Login protection works
+- [ ] Can create products
+- [ ] Can create variants
+- [ ] Can edit variants
+- [ ] Can delete variants
+- [ ] Stock changes affect customer site
+- [ ] Orders are tracked
+- [ ] Order status can be updated
+
+### Admin Variant Management ✅
+- [ ] Variants created with all details
+- [ ] Stock levels control availability
+- [ ] Price adjustments applied
+- [ ] Low stock highlighted
+- [ ] Variants deleted independently
+- [ ] Multiple variants per product work
+- [ ] Variant details preserved in orders
+
+---
+
+## Quick Test Scenarios
+
+### Scenario 1: Out-of-Stock Product
+1. Admin sets all variants to stock 0
+2. Customer sees "Out of Stock" on product card
+3. Cannot select the product
+4. "Add to Cart" is disabled
+
+### Scenario 2: Price Adjustments
+1. Admin creates variant with +R500 adjustment
+2. Base price is R8,000
+3. Customer sees R8,500 on product detail
+4. Order total reflects R8,500 per unit
+
+### Scenario 3: Low Stock
+1. Admin creates variant with stock 2
+2. Customer can add 2 units
+3. Cannot add 3
+4. Stock shows in admin with "LOW" badge
+
+### Scenario 4: Multiple Variants
+1. Customer adds: iPhone 13 Midnight 128GB (qty 1)
+2. Customer adds: iPhone 13 Midnight 256GB (qty 1)
+3. Cart shows BOTH as separate items
+4. Each has its own stock limit
+5. Order records both separately
+
+### Scenario 5: Stock Reduction
+1. Variant has 5 in stock
+2. Order placed for 3 units
+3. Variant now shows 2 in stock
+4. Next customer can only add max 2
+
+---
+
+## Troubleshooting
+
+### Products not showing
+- Check if admin has created products with stock > 0
+- Check browser console for errors
+
+### Variants not updating
+- Refresh page to reload from localStorage
+- Check admin that variants were actually created
+- Check browser console for validation errors
+
+### Stock not reducing
+- Make sure order is actually created (check confirmation)
+- Check admin Products tab for variant stock
+- May need to refresh to see updated values
+
+### Price is wrong
+- Check variant priceAdjust value in admin
+- Verify base price is set correctly
+- Order should show base + adjust breakdown
+
+---
+
+**Last Updated:** February 17, 2026  
+**System:** iRevive Variant-Level Inventory v1.0  
+**Status:** ✅ COMPLETE
 ```
 1. Before: Product shows 10 stock
 2. Add 3 to cart, checkout, place order

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import { useAdmin } from '../lib/context/useAdmin'
-import { getProducts } from '../lib/api/products'
+import { getAllProducts } from '../lib/services/products'
+import ProductManagement from '../admin/ProductManagement'
 import { getInventory, updateStock, getInventoryStats } from '../lib/services/inventory'
 import { getAllOrders, updateOrderStatus, ORDER_STATUS } from '../lib/services/orders'
 
@@ -34,7 +35,7 @@ const AdminPage = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const productsData = await getProducts()
+        const productsData = getAllProducts()
         const inventoryData = getInventory()
         const ordersData = getAllOrders()
         
@@ -361,6 +362,7 @@ const AdminPage = () => {
             <nav className="-mb-px flex space-x-8">
               {[
                 { id: 'dashboard', label: 'Dashboard' },
+                { id: 'products', label: 'Products' },
                 { id: 'inventory', label: 'Inventory' },
                 { id: 'orders', label: 'Orders' }
               ].map((tab) => (
@@ -382,6 +384,7 @@ const AdminPage = () => {
 
         {/* Tab Content */}
         {activeTab === 'dashboard' && <DashboardTab />}
+        {activeTab === 'products' && <ProductManagement />}
         {activeTab === 'inventory' && <InventoryTab />}
         {activeTab === 'orders' && <OrdersTab />}
       </main>

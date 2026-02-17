@@ -2,10 +2,14 @@
  * Order Management Service
  * 
  * Handles:
- * - Order creation
+ * - Order creation from cart items with variant details
  * - Order status updates
  * - Order persistence (localStorage)
- * - Inventory management after purchase
+ * - Order tracking and retrieval
+ * 
+ * Note: This service works with variant-level inventory system
+ * Each order item tracks the exact variant (color, storage, condition)
+ * that was purchased.
  * 
  * In production:
  * - Replace localStorage with database
@@ -32,6 +36,9 @@ const generateOrderId = () => {
 /**
  * Create a new order from cart items
  * Returns order object with id, items, total, status, etc.
+ * 
+ * Cart items should have product, variant, and quantity
+ * Variant should include: id, color, storage, condition, stock, priceAdjust
  */
 export const createOrder = async (cartItems) => {
   if (!cartItems || cartItems.length === 0) {
@@ -39,10 +46,11 @@ export const createOrder = async (cartItems) => {
   }
 
   // Calculate total (in cents)
-  const total = cartItems.reduce(
-    (sum, item) => sum + (item.variant.priceCents * item.quantity),
-    0
-  )
+  // Price is: product.basePrice + variant.priceAdjust
+  const total = cartItems.reduce((sum, item) => {
+    const itemPrice = item.product.basePrice + (item.variant.priceAdjust || 0)
+    return sum + (itemPrice * item.quantity)
+  }, 0)
 
   const order = {
     id: generateOrderId(),
@@ -51,11 +59,13 @@ export const createOrder = async (cartItems) => {
       productTitle: item.product.title,
       variantId: item.variant.id,
       variantColor: item.variant.color,
-      variantStorage: item.variant.storageGB,
+      variantStorage: item.variant.storage,  // Changed from storageGB to storage
       variantCondition: item.variant.condition,
-      priceCents: item.variant.priceCents,
+      basePriceCents: item.product.basePrice,
+      priceAdjustCents: item.variant.priceAdjust || 0,
+      priceCents: item.product.basePrice + (item.variant.priceAdjust || 0),
       quantity: item.quantity,
-      subtotalCents: item.variant.priceCents * item.quantity
+      subtotalCents: (item.product.basePrice + (item.variant.priceAdjust || 0)) * item.quantity
     })),
     totalCents: total,
     status: ORDER_STATUS.PENDING,
