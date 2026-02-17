@@ -1,32 +1,55 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
+import { useAdmin } from '../lib/context/useAdmin'
 import { getProducts } from '../lib/api/products'
+import { getInventory, updateStock, getInventoryStats } from '../lib/services/inventory'
+import { getAllOrders, updateOrderStatus, ORDER_STATUS } from '../lib/services/orders'
 
+/**
+ * Admin Dashboard
+ * 
+ * Features:
+ * - Dashboard with KPIs
+ * - Product inventory management
+ * - Order management with status updates
+ * - Admin panel access control
+ * 
+ * Note: Requires admin authentication to access
+ */
 const AdminPage = () => {
+  const navigate = useNavigate()
+  const { adminUser, logout } = useAdmin()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [products, setProducts] = useState([])
+  const [inventory, setInventory] = useState({})
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editingStock, setEditingStock] = useState(null)
+  const [newStockValue, setNewStockValue] = useState('')
+  const [stats, setStats] = useState(null)
 
+  // Load data on mount
   useEffect(() => {
-    const fetchData = async () => {
+    const loadData = async () => {
       try {
         const productsData = await getProducts()
+        const inventoryData = getInventory()
+        const ordersData = getAllOrders()
+        
         setProducts(productsData)
-        // Mock orders data - in real app this would come from API
-        setOrders([
-          { id: 1, customer: 'John Doe', total: 25000, status: 'pending', date: '2024-01-15' },
-          { id: 2, customer: 'Jane Smith', total: 18000, status: 'completed', date: '2024-01-14' },
-          { id: 3, customer: 'Bob Johnson', total: 32000, status: 'shipped', date: '2024-01-13' },
-        ])
+        setInventory(inventoryData)
+        setOrders(ordersData)
+        setStats(getInventoryStats())
       } catch (error) {
-        console.error('Error fetching admin data:', error)
+        console.error('Error loading admin data:', error)
       } finally {
         setLoading(false)
       }
     }
-    fetchData()
+    
+    loadData()
   }, [])
 
   const formatPrice = (cents) => {
@@ -34,218 +57,320 @@ const AdminPage = () => {
   }
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'completed': return 'bg-green-100 text-green-800'
-      case 'shipped': return 'bg-blue-100 text-blue-800'
-      case 'cancelled': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      processing: 'bg-blue-100 text-blue-800',
+      shipped: 'bg-purple-100 text-purple-800',
+      delivered: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800'
+    }
+    return colors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  /**
+   * Handle stock update
+   */
+  const handleUpdateStock = (productId, newValue) => {
+    try {
+      updateStock(productId, parseInt(newValue))
+      const updated = getInventory()
+      setInventory(updated)
+      setStats(getInventoryStats())
+      setEditingStock(null)
+      setNewStockValue('')
+    } catch (error) {
+      alert('Error updating stock: ' + error.message)
     }
   }
 
-  const DashboardTab = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold mb-2">Total Products</h3>
-        <p className="text-3xl font-bold text-blue-600">{products.length}</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold mb-2">Total Orders</h3>
-        <p className="text-3xl font-bold text-green-600">{orders.length}</p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold mb-2">Revenue</h3>
-        <p className="text-3xl font-bold text-purple-600">
-          {formatPrice(orders.reduce((total, order) => total + order.total, 0))}
-        </p>
-      </div>
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold mb-2">Pending Orders</h3>
-        <p className="text-3xl font-bold text-orange-600">
-          {orders.filter(order => order.status === 'pending').length}
-        </p>
-      </div>
-    </div>
-  )
+  /**
+   * Handle order status change
+   */
+  const handleOrderStatusChange = (orderId, newStatus) => {
+    try {
+      updateOrderStatus(orderId, newStatus)
+      const updated = getAllOrders()
+      setOrders(updated)
+    } catch (error) {
+      alert('Error updating order: ' + error.message)
+    }
+  }
 
-  const ProductsTab = () => (
-    <div className="bg-white rounded-lg shadow-md">
-      <div className="p-6 border-b">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold">Product Management</h2>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
-            Add New Product
-          </button>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {products.map((product) => (
-              <tr key={product.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <img className="h-10 w-10 rounded object-cover" src={product.images[0]} alt={product.title} />
-                    <div className="ml-4">
-                      <div className="text-sm font-medium text-gray-900">{product.title}</div>
-                      <div className="text-sm text-gray-500">{product.brand}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.category}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatPrice(product.priceCents)}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                    Active
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
-                  <button className="text-red-600 hover:text-red-900">Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-
-  const OrdersTab = () => (
-    <div className="bg-white rounded-lg shadow-md">
-      <div className="p-6 border-b">
-        <h2 className="text-xl font-semibold">Order Management</h2>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {orders.map((order) => (
-              <tr key={order.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.customer}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatPrice(order.total)}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.date}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button className="text-indigo-600 hover:text-indigo-900 mr-4">View</button>
-                  <button className="text-green-600 hover:text-green-900">Update Status</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-
-  const SettingsTab = () => (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-6">Settings</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-lg font-medium mb-4">Store Information</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Store Name</label>
-              <input type="text" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" defaultValue="iRevive" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Contact Email</label>
-              <input type="email" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" defaultValue="admin@irevive.co.za" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-              <input type="tel" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" defaultValue="+27 21 123 4567" />
-            </div>
-          </div>
-        </div>
-        <div>
-          <h3 className="text-lg font-medium mb-4">Payment Settings</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Stripe API Key</label>
-              <input type="password" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="sk_test_..." />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">PayFast Merchant ID</label>
-              <input type="text" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="12345678" />
-            </div>
-            <div className="flex items-center">
-              <input type="checkbox" className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-              <label className="ml-2 block text-sm text-gray-900">Enable South African Payments</label>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="mt-6">
-        <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
-          Save Settings
-        </button>
-      </div>
-    </div>
-  )
+  /**
+   * Handle logout
+   */
+  const handleLogout = () => {
+    logout()
+    navigate('/admin/login')
+  }
 
   if (loading) {
     return (
       <>
         <Header />
-        <div className="container mx-auto p-4">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading admin dashboard...</p>
-          </div>
-        </div>
+        <main className="container mx-auto p-4 min-h-screen flex items-center justify-center">
+          <p className="text-gray-600">Loading admin dashboard...</p>
+        </main>
         <Footer />
       </>
     )
   }
 
+  // Dashboard tab content
+  const DashboardTab = () => (
+    <div>
+      {/* User Info */}
+      <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg flex justify-between items-center">
+        <div>
+          <p className="text-sm text-gray-600">Logged in as</p>
+          <p className="text-lg font-semibold text-blue-900">{adminUser?.username}</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+        >
+          Logout
+        </button>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Total Products</h3>
+          <p className="text-3xl font-bold text-blue-600">{stats?.totalProducts || 0}</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Total Stock</h3>
+          <p className="text-3xl font-bold text-green-600">{stats?.totalStock || 0} units</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Total Sold</h3>
+          <p className="text-3xl font-bold text-purple-600">{stats?.totalSold || 0} units</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Low Stock Items</h3>
+          <p className="text-3xl font-bold text-orange-600">{stats?.lowStockCount || 0} items</p>
+        </div>
+      </div>
+
+      {/* Recent Orders */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="p-6 border-b">
+          <h2 className="text-xl font-bold text-black">Recent Orders</h2>
+        </div>
+        {orders.length === 0 ? (
+          <div className="p-6 text-gray-600 text-center">No orders yet</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Order ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Total</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {orders.slice(0, 5).map((order) => (
+                  <tr key={order.id}>
+                    <td className="px-6 py-3 text-sm font-mono text-gray-900">{order.id}</td>
+                    <td className="px-6 py-3 text-sm font-bold text-black">{formatPrice(order.totalCents)}</td>
+                    <td className="px-6 py-3">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
+                        {order.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-600">
+                      {new Date(order.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // Inventory Management tab
+  const InventoryTab = () => (
+    <div className="space-y-6">
+      {/* Low Stock Alert */}
+      {stats?.lowStockCount > 0 && (
+        <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+          <p className="text-orange-800">
+            <strong>⚠️ Warning:</strong> {stats.lowStockCount} product(s) have low stock levels
+          </p>
+        </div>
+      )}
+
+      {/* Inventory Table */}
+      <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Product</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Current Stock</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Sold</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {products.map((product) => {
+              const inv = inventory[product.id]
+              const isLowStock = inv && inv.currentStock <= 2
+              
+              return (
+                <tr key={product.id} className={isLowStock ? 'bg-orange-50' : ''}>
+                  <td className="px-6 py-3">
+                    <div className="flex items-center">
+                      <img 
+                        src={product.images[0]} 
+                        alt={product.title}
+                        className="h-10 w-10 rounded object-cover mr-3"
+                        onError={(e) => e.target.src = '/assets/placeholder.jpg'}
+                      />
+                      <div>
+                        <p className="font-semibold text-black">{product.title}</p>
+                        <p className="text-xs text-gray-600">{formatPrice(product.priceCents)}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3">
+                    {editingStock === product.id ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={newStockValue}
+                          onChange={(e) => setNewStockValue(e.target.value)}
+                          className="w-20 px-2 py-1 border border-gray-300 rounded"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleUpdateStock(product.id, newStockValue)}
+                          className="px-2 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingStock(null)}
+                          className="px-2 py-1 bg-gray-300 rounded text-sm hover:bg-gray-400"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className={`text-lg font-bold ${isLowStock ? 'text-orange-600' : 'text-black'}`}>
+                          {inv?.currentStock || 0}
+                        </span>
+                        {isLowStock && <span className="text-orange-600 text-xs font-semibold">LOW</span>}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-sm text-gray-900">{inv?.sold || 0}</td>
+                  <td className="px-6 py-3">
+                    <button
+                      onClick={() => {
+                        setEditingStock(product.id)
+                        setNewStockValue(inv?.currentStock || 0)
+                      }}
+                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+
+  // Orders Management tab
+  const OrdersTab = () => (
+    <div className="bg-white rounded-lg shadow-md">
+      {orders.length === 0 ? (
+        <div className="p-6 text-gray-600 text-center">No orders created yet</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Order ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Items</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Total</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {orders.map((order) => (
+                <tr key={order.id}>
+                  <td className="px-6 py-3 text-sm font-mono text-gray-900">{order.id}</td>
+                  <td className="px-6 py-3 text-sm text-gray-900">{order.items.length}</td>
+                  <td className="px-6 py-3 text-sm font-bold text-black">{formatPrice(order.totalCents)}</td>
+                  <td className="px-6 py-3">
+                    <select
+                      value={order.status}
+                      onChange={(e) => handleOrderStatusChange(order.id, e.target.value)}
+                      className={`px-2 py-1 rounded text-xs font-semibold ${getStatusColor(order.status)}`}
+                    >
+                      <option value={ORDER_STATUS.PENDING}>Pending</option>
+                      <option value={ORDER_STATUS.PROCESSING}>Processing</option>
+                      <option value={ORDER_STATUS.SHIPPED}>Shipped</option>
+                      <option value={ORDER_STATUS.DELIVERED}>Delivered</option>
+                      <option value={ORDER_STATUS.CANCELLED}>Cancelled</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-3 text-sm text-gray-600">
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-3 text-sm">
+                    <button
+                      onClick={() => alert(JSON.stringify(order.items, null, 2))}
+                      className="text-blue-600 hover:underline"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <>
       <Header />
-      <main className="container mx-auto p-4">
+      <main className="container mx-auto p-4 pb-12">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+          <h1 className="text-4xl font-bold text-black mb-6">Admin Dashboard</h1>
 
           {/* Navigation Tabs */}
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
               {[
                 { id: 'dashboard', label: 'Dashboard' },
-                { id: 'products', label: 'Products' },
-                { id: 'orders', label: 'Orders' },
-                { id: 'settings', label: 'Settings' }
+                { id: 'inventory', label: 'Inventory' },
+                { id: 'orders', label: 'Orders' }
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                     activeTab === tab.id
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
                   }`}
                 >
                   {tab.label}
@@ -257,9 +382,8 @@ const AdminPage = () => {
 
         {/* Tab Content */}
         {activeTab === 'dashboard' && <DashboardTab />}
-        {activeTab === 'products' && <ProductsTab />}
+        {activeTab === 'inventory' && <InventoryTab />}
         {activeTab === 'orders' && <OrdersTab />}
-        {activeTab === 'settings' && <SettingsTab />}
       </main>
       <Footer />
     </>

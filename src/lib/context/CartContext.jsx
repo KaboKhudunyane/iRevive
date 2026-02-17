@@ -1,5 +1,6 @@
 import React, { createContext, useReducer, useEffect } from 'react'
 import { cartReducer, initialCartState, cartActions } from './cartReducer'
+import { getProductStock } from '../services/inventory'
 
 const CartContext = createContext()
 
@@ -11,11 +12,17 @@ const CartContext = createContext()
  * - Persists cart to localStorage
  * - Supports quantity updates and item removal
  * - Calculates totals automatically
+ * - Validates stock before adding items
+ *
+ * Features:
+ * - Prevents adding more items than available stock
+ * - Persists cart across sessions
+ * - Automatic calculation of totals
+ * - Maximum quantity validation
  *
  * Next steps:
- * - Add cart persistence across sessions
- * - Implement cart validation
- * - Add maximum quantity limits
+ * - Add cart item forecasting for reserved inventory
+ * - Implement cart expiration (keep items for 30 mins)
  */
 const CartProvider = ({ children }) => {
   const [cart, dispatch] = useReducer(cartReducer, initialCartState)
@@ -38,12 +45,33 @@ const CartProvider = ({ children }) => {
     localStorage.setItem('cart', JSON.stringify(cart))
   }, [cart])
 
-  // Cart actions
+  /**
+   * Add item to cart with stock validation
+   * Prevents adding more than available stock
+   */
   const addItem = (product, variant, quantity = 1) => {
+    // Validate stock
+    const availableStock = getProductStock(product.id)
+    
+    // Check if we already have this item in cart
+    const existingItem = cart.items.find(
+      item => item.product.id === product.id && item.variant.id === variant.id
+    )
+    
+    const totalQuantityInCart = existingItem ? existingItem.quantity + quantity : quantity
+    
+    if (totalQuantityInCart > availableStock) {
+      console.warn(
+        `Cannot add ${quantity} items. Only ${availableStock - (existingItem?.quantity || 0)} available.`
+      )
+      return false
+    }
+
     dispatch({
       type: cartActions.ADD_ITEM,
       payload: { product, variant, quantity }
     })
+    return true
   }
 
   const removeItem = (productId, variantId) => {
@@ -53,9 +81,19 @@ const CartProvider = ({ children }) => {
     })
   }
 
+  /**
+   * Update quantity with stock validation
+   */
   const updateQuantity = (productId, variantId, quantity) => {
     if (quantity <= 0) {
       removeItem(productId, variantId)
+      return
+    }
+
+    // Validate against stock
+    const availableStock = getProductStock(productId)
+    if (quantity > availableStock) {
+      console.warn(`Cannot set quantity to ${quantity}. Only ${availableStock} available.`)
       return
     }
 
